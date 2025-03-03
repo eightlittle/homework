@@ -347,86 +347,89 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
-from scipy.interpolate import interp1d
 
-# filtering -> cutoff frequency set up 6
+# Butterworth filter function
 def butterworth_filter(data, cutoff, fs, order=4, filter_type='low'):
     nyquist = 0.5 * fs
     return filtfilt(*butter(order, cutoff / nyquist, btype=filter_type), data, axis=0)
 
-# time derivate 
-def time_d(data, interval):
-    return np.gradient(data, interval, axis=0)
+# Compute velocity (supports both 1D and 2D data)
+def time_d(data, sampling_interval):
+    data = np.atleast_2d(data).T if data.ndim == 1 else data
+    velocity = np.zeros_like(data)
+    for i in range(1, data.shape[0] - 1):
+        velocity[i, :] = (data[i + 1, :] - data[i - 1, :]) / (2 * sampling_interval)
+    return velocity.squeeze()
 
-# time derivate 
-def time_dd(data, interval):
-    return np.gradient(np.gradient(data, interval, axis=0), interval, axis=0)
+# Compute acceleration (supports both 1D and 2D data)
+def time_dd(data, sampling_interval):
+    data = np.atleast_2d(data).T if data.ndim == 1 else data
+    acceleration = np.zeros_like(data)
+    for i in range(1, data.shape[0] - 1):
+        acceleration[i, :] = (data[i + 1, :] - 2 * data[i, :] + data[i - 1, :]) / (sampling_interval ** 2)
+    return acceleration.squeeze()
 
-# calculate relative angle 
-def calculate_theta(data1, data2):
-    m = np.shape(data1)[0]
-    theta = np.zeros(m)
-    for i in range(m):
-        A = data1[i, :]
-        B = data2[i, :]
-        nor_A = A / np.linalg.norm(A)
-        nor_B = B / np.linalg.norm(B)
-        R = np.array([[nor_A[0], nor_A[1]], [-nor_A[1], nor_A[0]]])
-        c = np.dot(R, nor_B)
-        theta[i] = np.arctan2(c[1], c[0])
-    return theta
+# Interpolation function for missing values
+def interpolate_with_cubic(data):
+    data = pd.DataFrame(data)
+    data.replace(0, np.nan, inplace=True)
+    data = data.interpolate(method='linear', axis=0)
+    data.bfill(inplace=True)
+    data.ffill(inplace=True)
+    if data.isnull().values.any() or (data == 0).any().any():
+        data = data.interpolate(method='cubic', axis=0).bfill().ffill()
+    return data.values
 
-# if we have gimbal lock -> use this function to fix it 
-def unwrap_deg(data):
-    data = data.copy()
-    dp = np.diff(data)
-    dps = np.mod(dp + np.pi, 2 * np.pi) - np.pi
-    dps[np.logical_and(dps == -np.pi, dp > 0)] = np.pi
-    dp_corr = dps - dp
-    dp_corr[np.abs(dp) < np.pi] = 0
-    data[1:] += np.cumsum(dp_corr)
-    return data
-
-# input data
+# Load data
 file_path = '/Users/kairenzheng/Library/CloudStorage/OneDrive-AuburnUniversity/KINE7670_homeworks/opencap_study/data_opencap_squat_trc/VJ.csv'
-
-# run data
 df = pd.read_csv(file_path, header=None)
 
-# get frequency
-fs = int(float(df.iloc[2, 1]))
+# Get sampling frequency (ensure correct conversion)
+try:
+    fs = float(df.iloc[2, 1])
+    fs = int(fs)  # Ensure it's an integer
+except ValueError:
+    raise ValueError("Sampling frequency (fs) could not be converted to a number. Please check the CSV file content.")
 
-# get time interval = 1 / ferquency
-sampling_interval = 1 / fs
+sampling_interval = 1 / fs  # Compute sampling interval
 
-# pick up positions 
+# Extract segment displacement data
 segment_names = ['mid_hip', 'Rhip', 'RKnee', 'RAnkle', 'Lhip', 'LKnee', 'LAnkle']
 segment_columns = [(23, 26), (26, 29), (29, 32), (32, 35), (35, 38), (38, 41), (41, 44)]
+
+# Create a dictionary to store segment data
 segments = {name: df.iloc[6:, start:end].astype(float).to_numpy() for name, (start, end) in zip(segment_names, segment_columns)}
 
+# Invert the Z-axis for all segments
+for name in segments:
+    segments[name][:, 2] *= -1
 
-# set up elements 
+# Apply interpolation to handle missing values
+segments = {name: interpolate_with_cubic(data) for name, data in segments.items()}
+
+# Set the cutoff frequency for the Butterworth filter
 cutoff = 6
 
-# run butterworth_filter
+# Apply the filter
 filtered_segments = {name: butterworth_filter(seg, cutoff, fs) for name, seg in segments.items()}
 
-# get lineart velocity 
-linear_velocity = {name: time_d(filtered_segments[name], sampling_interval) for name in segment_names}
+# Compute linear velocity and acceleration
+linear_velocity = {name: time_d(filtered_segments[name], sampling_interval) for name in segments.keys()}
+linear_acceleration = {name: time_dd(filtered_segments[name], sampling_interval) for name in segments.keys()}
 
-# get linear acceleration 
-linear_acceleration = {name: time_dd(filtered_segments[name], sampling_interval) for name in segment_names}
+# Define event indices (must be manually set)
+event1, event2 = 10, 100  # Modify based on requirements
 
-# make graph
-for name in segment_names:
+# Plot graphs
+for name in segments.keys():
     fig, axs = plt.subplots(3, 1, figsize=(12, 10))
     fig.suptitle(f'{name} Position, Velocity, and Acceleration', fontsize=16)
-    
-    # Pick data from event1 to event2
+
+    # Extract data for the event range
     position_data = filtered_segments[name][event1:event2]
     velocity_data = linear_velocity[name][event1:event2]
     acceleration_data = linear_acceleration[name][event1:event2]
-    
+
     for idx, (data, label, ylabel) in enumerate(zip(
         [position_data, velocity_data, acceleration_data],
         ['Position', 'Linear Velocity', 'Linear Acceleration'],
@@ -442,5 +445,3 @@ for name in segment_names:
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
-
-
