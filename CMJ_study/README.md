@@ -1,20 +1,30 @@
-# homework for gait study
-1. three giat cycles in two conditions
-    A. walking without backpack
-    B. walking with backpack (10%BW)
-2. find relative angles of hip, knee, and ankle
-3. get angular veloiocties of those three angles 
-4. time normalize to 100 frames 
-5. compare two conditions 
+participant
 
-# homework for opencap vs tracker data
-1-1 three squats in both systems
-1-2 using hip position to set up events -> standard = -0.5cm
-1-3 get relative angle of Lknee in both systems
-1-4 time normalize to 100 frame
-1-5 calculate rms and ICC cross groups and within gorups
+Two college participants 
+Participant 1 (in research group)
+Participant 2 (not in research group) 
+(height: 1.79 ± .11 m; mass: 83.36kg ± 20.16kg)
+Two vertical jumps for each participant
+First one: cued by “Jump as high as possible” (AHAP)
+Second one: cue by “Jump as fast as possible” (AFAP)
 
-2-1 one vertical jump in opencap
-2-2 input positions of joints
-2-3 calculate linear veloicty and acceleration of joints 
-2-4 graphs
+
+method:
+
+100 Hz by a 8-camera optical motion capture system 
+(Theia 3D, Theia Markerless Inc., Kingston, ON )
+1200 Hz by  1 force plate 
+(Bertec Corp.; Columbus, OH, USA )
+
+Data processes:
+Filter data: 4th zero lag Butterworth low pass filtering 
+cutoff frequency = 6Hz for motion data / 20Hz for force plate data 
+Calculate knee flexion / extension angle following the previous homework
+    (relative angles)
+Calculate knee angular velocity with angle respect by the time interval 
+Calculate jump height by impulse method 
+Calculate impulse by integral
+Normalized ground reaction force (GRF) and impulse by body weight (BW)
+
+
+
